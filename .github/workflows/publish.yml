@@ -1,4 +1,4 @@
-﻿name: Build and publish Docker image
+﻿name: Build, publish and deploy Docker image
 
 on:
   push:
@@ -41,3 +41,29 @@ jobs:
 
           docker push "$IMAGE:${SHORT_SHA}"
           docker push "$IMAGE:latest"
+
+      - name: Deploy to Kubernetes
+        if: github.event_name == 'push'
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: 51.250.12.21
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+          IMAGE="cr.yandex/crp7gjifsd8kne87344g/devops-diploma-app"
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+
+          ssh -i ~/.ssh/id_ed25519 \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile=~/.ssh/known_hosts \
+            ubuntu@"$DEPLOY_HOST" \
+            "kubectl set image deployment/devops-diploma-app devops-diploma-app=$IMAGE:$SHORT_SHA && kubectl rollout status deployment/devops-diploma-app --timeout=180s"
