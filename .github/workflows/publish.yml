@@ -1,0 +1,43 @@
+﻿name: Build and publish Docker image
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t devops-diploma-app:${{ github.sha }} .
+
+      - name: Login to Yandex Container Registry
+        if: github.event_name == 'push'
+        env:
+          YC_SERVICE_ACCOUNT_KEY: ${{ secrets.YC_SERVICE_ACCOUNT_KEY }}
+        run: printf '%s' "$YC_SERVICE_ACCOUNT_KEY" | docker login --username json_key --password-stdin cr.yandex
+
+      - name: Push Docker image
+        if: github.event_name == 'push'
+        env:
+          REGISTRY_ID: crp7gjifsd8kne87344g
+        run: |
+          IMAGE="cr.yandex/${REGISTRY_ID}/devops-diploma-app"
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+
+          docker tag "devops-diploma-app:${GITHUB_SHA}" "$IMAGE:${SHORT_SHA}"
+          docker tag "devops-diploma-app:${GITHUB_SHA}" "$IMAGE:latest"
+
+          docker push "$IMAGE:${SHORT_SHA}"
+          docker push "$IMAGE:latest"
